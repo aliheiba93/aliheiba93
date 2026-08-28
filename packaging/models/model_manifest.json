@@ -1,0 +1,10 @@
+{
+  "name": "unverified-test-backend",
+  "version": "0.1.0",
+  "sha256": null,
+  "classes": ["cup_or_barrel", "ball"],
+  "input_size": [640, 640],
+  "opset": null,
+  "verification_status": "test-only-no-accuracy-claim",
+  "notes": "Replace with a domain-trained ONNX detector and update the SHA-256 before production use."
+}
