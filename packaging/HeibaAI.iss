@@ -11,8 +11,8 @@ SolidCompression=yes
 PrivilegesRequired=admin
 
 [Files]
-Source: "dist\HeibaAI\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
-Source: "dist\heiba-cli\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
+Source: "..\dist\HeibaAI\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
+Source: "..\dist\heiba-cli\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 
 [Icons]
 Name: "{autoprograms}\Heiba AI Analysis"; Filename: "{app}\HeibaAI.exe"
