@@ -1,0 +1,7 @@
+# Developer/training environment only; do not bundle these in the end-user runtime.
+torch==2.13.0
+ultralytics==8.3.70
+onnx==1.17.0
+onnxruntime==1.20.1
+onnxscript==0.2.1
+onnx-ir>=0.1.12
