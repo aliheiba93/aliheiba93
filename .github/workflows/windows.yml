@@ -1,21 +1,46 @@
-name: Windows build and tests
+name: Windows EXE build with bundled ONNX model
 on:
+  workflow_dispatch:
   push:
+    branches: [main]
   pull_request:
 jobs:
-  test-build:
+  build:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m pip install --upgrade pip
-      - run: pip install -r requirements-lock.txt
-      - run: pytest
-      - run: pip install pyinstaller
-      - run: pyinstaller packaging/heiba.spec
+      - name: Install runtime and build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-lock.txt
+          pip install pyinstaller
+      - name: Test
+        run: python -m pytest
+      - name: Build application and CLI
+        run: pyinstaller packaging/heiba.spec
+      - name: Verify bundled model
+        shell: pwsh
+        run: |
+          if (!(Test-Path "dist/HeibaAI/models/heiba_barrels_jewel.onnx")) { throw "Bundled ONNX model is missing" }
+          if (!(Test-Path "dist/heiba-cli/models/heiba_barrels_jewel.onnx")) { throw "CLI bundled ONNX model is missing" }
+          Get-Item "dist/HeibaAI/HeibaAI.exe"
+          Get-Item "dist/heiba-cli/heiba-cli.exe"
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+      - name: Build installer
+        shell: pwsh
+        run: iscc packaging/HeibaAI.iss
+      - name: Build portable ZIP
+        shell: pwsh
+        run: Compress-Archive -Path dist/HeibaAI,dist/heiba-cli -DestinationPath HeibaAI-Portable-x64.zip -Force
       - uses: actions/upload-artifact@v4
         with:
-          name: heiba-windows-build
-          path: dist/
+          name: heiba-ai-windows-x64
+          path: |
+            Output/HeibaAI-Setup-x64.exe
+            HeibaAI-Portable-x64.zip
+            dist/HeibaAI
+            dist/heiba-cli
