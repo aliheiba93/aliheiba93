@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import time
+import math
 from dataclasses import asdict
 from pathlib import Path
 from typing import Callable
@@ -34,12 +35,19 @@ class AnalysisEngine:
         job_id, default_dir = self.repo.create_job(input_path)
         out = Path(output_dir) if output_dir else default_dir; out.mkdir(parents=True, exist_ok=True)
         selected = InferenceProviderSelector(provider).select()
-        detector = Detector(confidence=.3 if profile == "fast" else .4)
+        candidates = [
+            Path(__file__).resolve().parents[2] / "training" / "barrels_jewel" / "heiba_barrels_jewel.onnx",
+            Path(__file__).resolve().parents[2] / "packaging" / "models" / "heiba_barrels_jewel.onnx",
+            Path(getattr(__import__('sys'), '_MEIPASS', Path.cwd())) / "models" / "heiba_barrels_jewel.onnx",
+            Path.cwd() / "models" / "heiba_barrels_jewel.onnx",
+        ]
+        bundled_model = next((p for p in candidates if p.exists()), None)
+        detector = Detector(bundled_model, confidence=.3 if profile == "fast" else .4)
         tracker = ByteTrack()
         cap = cv2.VideoCapture(str(input_path)); writer = None
         if export_video:
             writer = cv2.VideoWriter(str(out / "annotated.mp4"), cv2.VideoWriter_fourcc(*"mp4v"), meta["fps"], (meta["width"], meta["height"]))
-        rows, events, frame_samples = [], [], []; start = time.perf_counter(); balls_seen = 0; cup_ids = set(); dropped = 0
+        rows, events, frame_samples = [], [], []; start = time.perf_counter(); balls_seen = 0; cup_ids = set(); dropped = 0; ball_links = []; last_ball_link = None
         events.append({"name":"INITIALIZED", "frame":0, "timestamp":0.0, "evidence":"analysis_started"})
         total = max(meta["frame_count"], 1); frame_index = 0
         while True:
@@ -50,6 +58,14 @@ class AnalysisEngine:
             balls = [t for t in tracks if t.cls == "ball" and not t.predicted]
             cups = [t for t in tracks if t.cls == "cup_or_barrel" and not t.predicted]
             balls_seen += bool(balls); cup_ids.update(t.track_id for t in cups)
+            if balls and cups:
+                ball = balls[0]; bx, by = ball.bbox[0] + ball.bbox[2] / 2, ball.bbox[1] + ball.bbox[3] / 2
+                nearest = min(cups, key=lambda t: math.hypot((t.bbox[0]+t.bbox[2]/2)-bx, (t.bbox[1]+t.bbox[3]/2)-by))
+                cx, cy = nearest.bbox[0] + nearest.bbox[2]/2, nearest.bbox[1] + nearest.bbox[3]/2
+                distance = math.hypot(cx-bx, cy-by)
+                if distance <= max(140.0, nearest.bbox[2] * 1.25):
+                    last_ball_link = {"track_id": nearest.track_id, "distance_px": round(distance,2), "ball_track_id": ball.track_id, "frame": frame_index}
+                    ball_links.append(last_ball_link)
             timestamp = frame_index / meta["fps"]
             if balls and (not events or events[-1]["name"] != "BALL_VISIBLE"): events.append({"name":"BALL_VISIBLE","frame":frame_index,"timestamp":timestamp,"evidence":"real_detection"})
             if frame_index == max(1, total // 3): events.append({"name":"SHUFFLE_STARTED","frame":frame_index,"timestamp":timestamp,"evidence":"timeline_marker"})
@@ -65,8 +81,11 @@ class AnalysisEngine:
         cap.release()
         if writer: writer.release()
         decision = "NO_DECISION"; reason = "No validated post-shuffle ball-to-cup evidence; human review required."
-        confidence = {"ball_visibility_ratio": balls_seen / max(frame_index,1), "tracked_cups": len(cup_ids), "evidence_frames": balls_seen, "calibration": "not_calibrated"}
-        result = {"job_id":job_id,"input":str(input_path),"metadata":meta,"provider":asdict(selected),"profile":profile,"tracker":tracker.name,"model":{"name":detector.model_name,"verified":False},"frame_samples":frame_samples,"events":events,"decision":{"state":decision,"reason":reason,"confidence_components":confidence},"paths":{}}
+        if last_ball_link and len(ball_links) >= 3:
+            decision = "LOW_CONFIDENCE"
+            reason = "A real jewel-to-barrel temporal association was observed, but post-shuffle evidence or calibration is insufficient; human review required."
+        confidence = {"ball_visibility_ratio": balls_seen / max(frame_index,1), "tracked_cups": len(cup_ids), "evidence_frames": balls_seen, "temporal_links": len(ball_links), "last_ball_link": last_ball_link, "calibration": "not_calibrated"}
+        result = {"job_id":job_id,"input":str(input_path),"metadata":meta,"provider":asdict(selected),"profile":profile,"tracker":tracker.name,"model":{"name":detector.model_name,"verified":False},"frame_samples":frame_samples,"events":events,"ball_links":ball_links[:500],"decision":{"state":decision,"reason":reason,"confidence_components":confidence},"paths":{}}
         (out / "analysis.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
         with (out / "tracks.csv").open("w", newline="", encoding="utf-8") as f:
             if rows: w=csv.DictWriter(f, fieldnames=list(rows[0])); w.writeheader(); w.writerows(rows)

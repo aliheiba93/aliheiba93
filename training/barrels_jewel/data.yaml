@@ -1,0 +1,6 @@
+path: /home/ubuntu/aliheiba93/training/barrels_jewel
+train: images/train
+val: images/val
+test: images/test
+nc: 2
+names: [ball, cup_or_barrel]
