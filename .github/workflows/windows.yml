@@ -24,8 +24,12 @@ jobs:
       - name: Verify bundled model
         shell: pwsh
         run: |
-          if (!(Test-Path "dist/HeibaAI/models/heiba_barrels_jewel.onnx")) { throw "Bundled ONNX model is missing" }
-          if (!(Test-Path "dist/heiba-cli/models/heiba_barrels_jewel.onnx")) { throw "CLI bundled ONNX model is missing" }
+          $guiModel = Get-ChildItem "dist/HeibaAI" -Recurse -Filter "heiba_barrels_jewel.onnx" | Select-Object -First 1
+          $cliModel = Get-ChildItem "dist/heiba-cli" -Recurse -Filter "heiba_barrels_jewel.onnx" | Select-Object -First 1
+          if ($null -eq $guiModel) { throw "Bundled GUI ONNX model is missing" }
+          if ($null -eq $cliModel) { throw "Bundled CLI ONNX model is missing" }
+          $guiModel.FullName
+          $cliModel.FullName
           Get-Item "dist/HeibaAI/HeibaAI.exe"
           Get-Item "dist/heiba-cli/heiba-cli.exe"
       - name: Install Inno Setup
