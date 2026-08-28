@@ -44,7 +44,7 @@ jobs:
         with:
           name: heiba-ai-windows-x64
           path: |
-            Output/HeibaAI-Setup-x64.exe
+            packaging/Output/HeibaAI-Setup-x64.exe
             HeibaAI-Portable-x64.zip
             dist/HeibaAI
             dist/heiba-cli
